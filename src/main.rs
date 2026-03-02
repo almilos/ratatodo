@@ -1,7 +1,7 @@
 use ratatui::{
     DefaultTerminal, Frame,
     crossterm::{
-        ExecutableCommand,
+        self, ExecutableCommand,
         event::{self, Event, KeyCode, KeyEvent, MouseEvent},
     },
     layout::{
@@ -201,6 +201,9 @@ impl Tui {
     }
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Включаем захват мыши
+    std::io::stdout().execute(crossterm::event::EnableMouseCapture)?;
     ratatui::run(|terminal| Tui::new().run(terminal))?;
+    std::io::stdout().execute(crossterm::event::DisableMouseCapture)?;
     Ok(())
 }
