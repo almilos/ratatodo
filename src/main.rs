@@ -12,12 +12,17 @@ use ratatui::{
 
 enum TuiState {
     Idle,
+    EnteringItemName, // состояние ввода названия пункта списка
+    EnteringItemDesc, // состояние ввода описания пункта списка
     ShouldExit,
 }
 
 struct Tui {
     state: TuiState,
     todo: TodoList,
+
+    cur_desc: String, // буферная переменная для ввода описания
+    cur_name: String, // буферная переменная для ввода названия
 }
 
 struct TodoList {
@@ -59,14 +64,59 @@ impl Tui {
         Self {
             state: TuiState::Idle,
             todo: TodoList::default(),
+            cur_desc: String::new(),
+            cur_name: String::new(),
         }
     }
 
     fn handle_key(&mut self, key: KeyEvent) {
         match key.code {
+            // В зависимости от текущего состояния приложения вводим текст или в буферное название
+            KeyCode::Char(c) if matches!(self.state, TuiState::EnteringItemName) => {
+                self.cur_name.push_str(&c.to_string())
+            }
+
+            //... или в буферное описание
+            KeyCode::Char(c) if matches!(self.state, TuiState::EnteringItemDesc) => {
+                self.cur_desc.push_str(&c.to_string())
+            }
+
+            // Обрабатываем удаление символа, так же в зависимости от состояния
+            KeyCode::Backspace if matches!(self.state, TuiState::EnteringItemName) => {
+                self.cur_name.pop();
+            }
+
+            KeyCode::Backspace if matches!(self.state, TuiState::EnteringItemDesc) => {
+                self.cur_desc.pop();
+            }
+
+            // Помечаем пункт выполненным с помощью клавиши delete
+            KeyCode::Delete => {
+                if let Some(i) = self.todo.state.selected()
+                    && i < self.todo.list.len()
+                {
+                    self.todo.list[i].done = !self.todo.list[i].done;
+                };
+            }
+
+            // Начинаем вводить пункт списка
+            KeyCode::Enter => match self.state {
+                TuiState::Idle => self.state = TuiState::EnteringItemName, // Переходим в состояние ввод названия по нажатию Enter
+                TuiState::EnteringItemName => self.state = TuiState::EnteringItemDesc, // После ввода названия вводим описание
+                TuiState::EnteringItemDesc => {
+                    // После ввода описания добавляем пункт в список и возвращаемся в обычное состояние
+                    self.state = TuiState::Idle;
+                    self.todo
+                        .list
+                        .push(TodoItem::new(&self.cur_name, &self.cur_desc));
+                    self.cur_desc = String::new();
+                    self.cur_name = String::new();
+                }
+                _ => {}
+            },
+
             KeyCode::Esc => self.state = TuiState::ShouldExit,
 
-            // Модифицируем state списка клавишами вверх/вниз
             KeyCode::Down => self.todo.state.select_next(),
 
             KeyCode::Up => self.todo.state.select_previous(),
@@ -113,18 +163,27 @@ impl Tui {
             .highlight_style(Style::new().bg(Color::Red))
             .direction(ListDirection::TopToBottom);
 
-        let text = if let Some(i) = self.todo.state.selected() // получаем индекс выбранного пункта списка
+        let text = if let Some(i) = self.todo.state.selected()
             && i < self.todo.list.len()
-        // select_next позволяет выбрать больше пунктов списка, чем на самом деле есть
         {
             self.todo.list[i].desc.clone()
         } else {
             String::new()
         };
 
-        let content = Paragraph::new(text).left_aligned().block(block_content);
+        let content = Paragraph::new(text)
+            .left_aligned()
+            .white()
+            .block(block_content);
 
-        let status = Paragraph::new("[Esc] to exit").block(block_status);
+        // Меняем текст в статус-баре в зависимости от состояния
+        let status_text = match self.state {
+            TuiState::EnteringItemName => &format!("Item name: {}", &self.cur_name),
+            TuiState::EnteringItemDesc => &format!("Item description: {}", &self.cur_desc),
+            _ => "[Enter] to enter item title, [Enter] again to add description, [Esc] to exit",
+        };
+
+        let status = Paragraph::new(status_text).block(block_status);
 
         let chunks_v = Layout::vertical(&[Fill(1), Length(3)]).split(frame.area());
         let chunks_h = Layout::horizontal(&[Percentage(20), Percentage(80)]).split(chunks_v[0]);
