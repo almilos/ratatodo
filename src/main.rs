@@ -1,6 +1,9 @@
 use ratatui::{
     DefaultTerminal, Frame,
-    crossterm::event::{self, Event, KeyCode, KeyEvent},
+    crossterm::{
+        ExecutableCommand,
+        event::{self, Event, KeyCode, KeyEvent, MouseEvent},
+    },
     layout::{
         Constraint::{Fill, Length, Percentage},
         Layout,
@@ -12,8 +15,8 @@ use ratatui::{
 
 enum TuiState {
     Idle,
-    EnteringItemName, // состояние ввода названия пункта списка
-    EnteringItemDesc, // состояние ввода описания пункта списка
+    EnteringItemName,
+    EnteringItemDesc,
     ShouldExit,
 }
 
@@ -21,8 +24,8 @@ struct Tui {
     state: TuiState,
     todo: TodoList,
 
-    cur_desc: String, // буферная переменная для ввода описания
-    cur_name: String, // буферная переменная для ввода названия
+    cur_desc: String,
+    cur_name: String,
 }
 
 struct TodoList {
@@ -69,19 +72,26 @@ impl Tui {
         }
     }
 
+    // https://docs.rs/libcrossterm/latest/crossterm/struct.MouseEvent.html
+    fn handle_mouse(&mut self, mouse: MouseEvent) {
+        if mouse.kind.is_down() {
+            let i = (mouse.row.saturating_sub(1)) as usize; // потому что ширина рамки 1 ячейка
+            if i < self.todo.list.len() {
+                self.todo.state.select(i.into())
+            }
+        }
+    }
+
     fn handle_key(&mut self, key: KeyEvent) {
         match key.code {
-            // В зависимости от текущего состояния приложения вводим текст или в буферное название
             KeyCode::Char(c) if matches!(self.state, TuiState::EnteringItemName) => {
                 self.cur_name.push_str(&c.to_string())
             }
 
-            //... или в буферное описание
             KeyCode::Char(c) if matches!(self.state, TuiState::EnteringItemDesc) => {
                 self.cur_desc.push_str(&c.to_string())
             }
 
-            // Обрабатываем удаление символа, так же в зависимости от состояния
             KeyCode::Backspace if matches!(self.state, TuiState::EnteringItemName) => {
                 self.cur_name.pop();
             }
@@ -90,8 +100,7 @@ impl Tui {
                 self.cur_desc.pop();
             }
 
-            // Помечаем пункт выполненным с помощью клавиши delete
-            KeyCode::Delete => {
+            KeyCode::Backspace if matches!(self.state, TuiState::Idle) => {
                 if let Some(i) = self.todo.state.selected()
                     && i < self.todo.list.len()
                 {
@@ -99,12 +108,16 @@ impl Tui {
                 };
             }
 
-            // Начинаем вводить пункт списка
+            KeyCode::Esc => self.state = TuiState::ShouldExit,
+
+            KeyCode::Down => self.todo.state.select_next(),
+
+            KeyCode::Up => self.todo.state.select_previous(),
+
             KeyCode::Enter => match self.state {
-                TuiState::Idle => self.state = TuiState::EnteringItemName, // Переходим в состояние ввод названия по нажатию Enter
-                TuiState::EnteringItemName => self.state = TuiState::EnteringItemDesc, // После ввода названия вводим описание
+                TuiState::Idle => self.state = TuiState::EnteringItemName,
+                TuiState::EnteringItemName => self.state = TuiState::EnteringItemDesc,
                 TuiState::EnteringItemDesc => {
-                    // После ввода описания добавляем пункт в список и возвращаемся в обычное состояние
                     self.state = TuiState::Idle;
                     self.todo
                         .list
@@ -114,12 +127,6 @@ impl Tui {
                 }
                 _ => {}
             },
-
-            KeyCode::Esc => self.state = TuiState::ShouldExit,
-
-            KeyCode::Down => self.todo.state.select_next(),
-
-            KeyCode::Up => self.todo.state.select_previous(),
             _ => {}
         }
     }
@@ -130,6 +137,7 @@ impl Tui {
             let event = event::read()?;
             match event {
                 Event::Key(key) => self.handle_key(key),
+                Event::Mouse(mouse) => self.handle_mouse(mouse),
                 _ => {}
             }
         }
@@ -176,7 +184,6 @@ impl Tui {
             .white()
             .block(block_content);
 
-        // Меняем текст в статус-баре в зависимости от состояния
         let status_text = match self.state {
             TuiState::EnteringItemName => &format!("Item name: {}", &self.cur_name),
             TuiState::EnteringItemDesc => &format!("Item description: {}", &self.cur_desc),
@@ -194,5 +201,6 @@ impl Tui {
     }
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    ratatui::run(|terminal| Tui::new().run(terminal))
+    ratatui::run(|terminal| Tui::new().run(terminal))?;
+    Ok(())
 }
