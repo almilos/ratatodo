@@ -16,14 +16,13 @@ enum TuiState {
 }
 
 struct Tui {
-    state: TuiState, // состояние приложения
+    state: TuiState,
     todo: TodoList,
 }
 
-// Список задач
 struct TodoList {
-    state: ListState, // https://docs.rs/ratatui/latest/ratatui/widgets/struct.List.html состояние списка
-    list: Vec<TodoItem>, // Вектор задач
+    state: ListState,
+    list: Vec<TodoItem>,
 }
 
 impl Default for TodoList {
@@ -41,9 +40,9 @@ impl Default for TodoList {
 }
 
 struct TodoItem {
-    done: bool,   // выполнен ли пункт
-    name: String, // название
-    desc: String, // описание
+    done: bool,
+    name: String,
+    desc: String,
 }
 
 impl TodoItem {
@@ -66,6 +65,11 @@ impl Tui {
     fn handle_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Esc => self.state = TuiState::ShouldExit,
+
+            // Модифицируем state списка клавишами вверх/вниз
+            KeyCode::Down => self.todo.state.select_next(),
+
+            KeyCode::Up => self.todo.state.select_previous(),
             _ => {}
         }
     }
@@ -94,11 +98,11 @@ impl Tui {
         let items: Vec<_> = self
             .todo
             .list
-            .iter() // собираем вектор Line для того, чтобы передать их в список
+            .iter()
             .map(|item| {
                 let mut line = Line::from(item.name.clone());
                 if item.done == true {
-                    line = line.crossed_out(); // зачеркиваем текст если пункт выполнен
+                    line = line.crossed_out();
                 };
                 line
             })
@@ -109,16 +113,23 @@ impl Tui {
             .highlight_style(Style::new().bg(Color::Red))
             .direction(ListDirection::TopToBottom);
 
-        let content = Paragraph::new("content")
-            .left_aligned()
-            .block(block_content);
+        let text = if let Some(i) = self.todo.state.selected() // получаем индекс выбранного пункта списка
+            && i < self.todo.list.len()
+        // select_next позволяет выбрать больше пунктов списка, чем на самом деле есть
+        {
+            self.todo.list[i].desc.clone()
+        } else {
+            String::new()
+        };
+
+        let content = Paragraph::new(text).left_aligned().block(block_content);
 
         let status = Paragraph::new("[Esc] to exit").block(block_status);
 
         let chunks_v = Layout::vertical(&[Fill(1), Length(3)]).split(frame.area());
         let chunks_h = Layout::horizontal(&[Percentage(20), Percentage(80)]).split(chunks_v[0]);
 
-        frame.render_stateful_widget(list, chunks_h[0], &mut self.todo.state); // https://docs.rs/ratatui/latest/ratatui/prelude/trait.StatefulWidget.html
+        frame.render_stateful_widget(list, chunks_h[0], &mut self.todo.state);
         frame.render_widget(content, chunks_h[1]);
         frame.render_widget(status, chunks_v[1]);
     }
