@@ -9,6 +9,7 @@
 Для этого нужно будет перейти на асинхронную обработку ивентов (crossterm::event::EventStream) и написать свой event loop.
 В качестве примера можно рассмотреть https://ratatui.rs/tutorials/counter-async-app/async-event-stream/
 Для примеров архитектуры приложения можно посмотреть, что предлагает сам ratatui https://ratatui.rs/concepts/application-patterns/
+Для индикации асинхронности можно добавить анимации, например https://docs.rs/throbber-widgets-tui/latest/throbber_widgets_tui/
 
 ## Вариант 2
 
