@@ -28,9 +28,9 @@ pub struct Tui {
     cur_desc: String,
     cur_name: String,
 
-    cancel_token: CancellationToken,
+    cancel_token: CancellationToken, // индикатор необходимости завершения работы
 
-    throbber_state: ThrobberState,
+    throbber_state: ThrobberState, // state для анимации
 }
 
 impl Tui {
@@ -107,18 +107,21 @@ impl Tui {
         terminal: &mut DefaultTerminal,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut event_stream = EventStream::new();
+
+        // Main loop
         loop {
             tokio::select! {
                 biased;
 
                 _ = self.cancel_token.cancelled() => {
-                    break Ok(());
+                    break Ok(()); // выходим, если выставлен индикатор необходимости выхода
                 }
 
                 _ = tokio::time::sleep(tokio::time::Duration::from_millis(40)) => {
-                    terminal.draw(|frame|self.render(frame))?;
+                    terminal.draw(|frame|self.render(frame))?; // рисуем наш туи каждые 40 мс
                 },
 
+                // Обработка ввода
                 crossterm_event = event_stream.next().fuse() => {
                     if let Some(Ok(event)) = crossterm_event {
                         match event {
@@ -188,6 +191,7 @@ impl Tui {
         frame.render_widget(content, chunks_h[1]);
         frame.render_widget(status, chunks_v[1]);
 
+        // Анимация
         let throbber_chunk = Layout::horizontal([Fill(1), Length(4)]).split(chunks_v[1])[1];
         self.throbber_state.calc_next();
 
